@@ -51,7 +51,7 @@ export default function TabLayout() {
           headerShown: false,
         }}
       />
-      <Tabs.Screen
+      {/* <Tabs.Screen
         name="index"
         options={{
           title: "Settings",
@@ -60,7 +60,7 @@ export default function TabLayout() {
           ),
           tabBarButton: (props: any) => <HapticTab {...props} />,
         }}
-      />
+      /> */}
     </Tabs>
   );
 }

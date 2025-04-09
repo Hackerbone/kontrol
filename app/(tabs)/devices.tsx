@@ -25,6 +25,7 @@ import {
   addLog,
   subscribeToDeviceLogs,
 } from "@/services/deviceService";
+import { SafeAreaView } from "react-native-safe-area-context"; // or from "react-native" if you're not using safe-area-context
 
 // Default device images
 const deviceImages = {
@@ -319,291 +320,295 @@ export default function DevicesScreen() {
   }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}>
-      {carouselMode ? (
-        // Carousel View
-        <View style={styles.carouselContainer}>
-          <View style={styles.carouselHeader}>
-            <TouchableOpacity onPress={() => setCarouselMode(false)}>
-              <IconSymbol name="list.bullet" color={textColor} size={24} />
-            </TouchableOpacity>
-            <ThemedText type="title">All Devices</ThemedText>
-            <TouchableOpacity onPress={() => setModalVisible(true)}>
-              <IconSymbol name="plus.circle" color={textColor} size={24} />
-            </TouchableOpacity>
-          </View>
-
-          {devices.length === 0 ? (
-            <View style={styles.emptyStateContainer}>
-              <ThemedText style={styles.emptyStateText}>
-                No devices found
-              </ThemedText>
-              <TouchableOpacity
-                style={[
-                  styles.addDeviceButton,
-                  { backgroundColor: accentColor },
-                ]}
-                onPress={() => setModalVisible(true)}
-              >
-                <ThemedText
-                  style={[
-                    styles.addDeviceButtonText,
-                    { color: isDark ? "#000" : "#fff" },
-                  ]}
-                >
-                  Add Your First Device
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              <Animated.FlatList
-                data={devices}
-                keyExtractor={(item) => item.id}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                renderItem={renderCarouselItem}
-                onScroll={Animated.event(
-                  [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                  { useNativeDriver: false }
-                )}
-                onMomentumScrollEnd={(event) => {
-                  const index = Math.round(
-                    event.nativeEvent.contentOffset.x / width
-                  );
-                  setCurrentIndex(index);
-                  setSelectedDevice(devices[index]?.id || null);
-                }}
-                contentContainerStyle={styles.carouselList}
-              />
-
-              {renderPagination()}
-            </>
-          )}
-        </View>
-      ) : (
-        // List View
-        <>
-          <ThemedView style={styles.header}>
-            <ThemedText type="title">Device Manager</ThemedText>
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => setCarouselMode(true)}
-              >
+    <SafeAreaView style={{ flex: 1, backgroundColor }}>
+      <ThemedView style={[styles.container, { backgroundColor }]}>
+        {carouselMode ? (
+          // Carousel View
+          <View style={styles.carouselContainer}>
+            <View style={styles.carouselHeader}>
+              <TouchableOpacity onPress={() => setCarouselMode(false)}>
                 <IconSymbol name="list.bullet" color={textColor} size={24} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.iconButton}
-                onPress={() => setModalVisible(true)}
-              >
+              <ThemedText type="title">All Devices</ThemedText>
+              <TouchableOpacity onPress={() => setModalVisible(true)}>
                 <IconSymbol name="plus.circle" color={textColor} size={24} />
               </TouchableOpacity>
             </View>
-          </ThemedView>
 
-          <ThemedView style={styles.content}>
-            <ThemedView style={styles.devicesSection}>
-              <ThemedText type="subtitle">Devices</ThemedText>
-              {devices.length === 0 ? (
-                <View style={styles.emptyStateContainer}>
-                  <ThemedText style={styles.emptyStateText}>
-                    No devices found
+            {devices.length === 0 ? (
+              <View style={styles.emptyStateContainer}>
+                <ThemedText style={styles.emptyStateText}>
+                  No devices found
+                </ThemedText>
+                <TouchableOpacity
+                  style={[
+                    styles.addDeviceButton,
+                    { backgroundColor: accentColor },
+                  ]}
+                  onPress={() => setModalVisible(true)}
+                >
+                  <ThemedText
+                    style={[
+                      styles.addDeviceButtonText,
+                      { color: isDark ? "#000" : "#fff" },
+                    ]}
+                  >
+                    Add Your First Device
                   </ThemedText>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <Animated.FlatList
+                  data={devices}
+                  keyExtractor={(item) => item.id}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  renderItem={renderCarouselItem}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                    { useNativeDriver: false }
+                  )}
+                  onMomentumScrollEnd={(event) => {
+                    const index = Math.round(
+                      event.nativeEvent.contentOffset.x / width
+                    );
+                    setCurrentIndex(index);
+                    setSelectedDevice(devices[index]?.id || null);
+                  }}
+                  contentContainerStyle={styles.carouselList}
+                />
+
+                {renderPagination()}
+              </>
+            )}
+          </View>
+        ) : (
+          // List View
+          <>
+            <ThemedView style={styles.header}>
+              <ThemedText type="title">Device Manager</ThemedText>
+              <View style={styles.headerActions}>
+                <TouchableOpacity
+                  style={styles.iconButton}
+                  onPress={() => setCarouselMode(true)}
+                >
+                  <IconSymbol name="list.bullet" color={textColor} size={24} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconButton}
+                  onPress={() => setModalVisible(true)}
+                >
+                  <IconSymbol name="plus.circle" color={textColor} size={24} />
+                </TouchableOpacity>
+              </View>
+            </ThemedView>
+
+            <ThemedView style={styles.content}>
+              <ThemedView style={styles.devicesSection}>
+                <ThemedText type="subtitle">Devices</ThemedText>
+                {devices.length === 0 ? (
+                  <View style={styles.emptyStateContainer}>
+                    <ThemedText style={styles.emptyStateText}>
+                      No devices found
+                    </ThemedText>
+                    <TouchableOpacity
+                      style={[
+                        styles.addDeviceButton,
+                        { backgroundColor: accentColor },
+                      ]}
+                      onPress={() => setModalVisible(true)}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.addDeviceButtonText,
+                          { color: isDark ? "#000" : "#fff" },
+                        ]}
+                      >
+                        Add Your First Device
+                      </ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={devices}
+                    renderItem={renderDeviceItem}
+                    keyExtractor={(item) => item.id}
+                    style={styles.deviceList}
+                  />
+                )}
+              </ThemedView>
+            </ThemedView>
+          </>
+        )}
+
+        {/* Add Device Modal */}
+        <Modal
+          visible={modalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View
+              style={[
+                styles.modalContent,
+                {
+                  backgroundColor: secondaryColor,
+                  borderColor,
+                },
+              ]}
+            >
+              <ThemedText type="title" style={styles.modalTitle}>
+                Add New Device
+              </ThemedText>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Device Name</ThemedText>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { backgroundColor, color: textColor, borderColor },
+                  ]}
+                  placeholder="Enter device name"
+                  placeholderTextColor={isDark ? "#888" : "#999"}
+                  value={newDevice.name}
+                  onChangeText={(text) =>
+                    setNewDevice({ ...newDevice, name: text })
+                  }
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Device Type</ThemedText>
+                <View style={styles.typeSelector}>
+                  {DEVICE_TYPES.map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.typeOption,
+                        {
+                          backgroundColor:
+                            newDevice.type === type
+                              ? accentColor
+                              : "transparent",
+                          borderColor: accentColor,
+                        },
+                      ]}
+                      onPress={() => setNewDevice({ ...newDevice, type })}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.typeOptionText,
+                          newDevice.type === type && {
+                            color: isDark ? "#000" : "#fff",
+                          },
+                        ]}
+                      >
+                        {type}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>Status</ThemedText>
+                <View style={styles.statusSelector}>
                   <TouchableOpacity
                     style={[
-                      styles.addDeviceButton,
-                      { backgroundColor: accentColor },
+                      styles.statusOption,
+                      {
+                        backgroundColor:
+                          newDevice.status === "online"
+                            ? "#4CAF50"
+                            : "transparent",
+                        borderColor: "#4CAF50",
+                      },
                     ]}
-                    onPress={() => setModalVisible(true)}
+                    onPress={() =>
+                      setNewDevice({ ...newDevice, status: "online" })
+                    }
                   >
                     <ThemedText
                       style={[
-                        styles.addDeviceButtonText,
-                        { color: isDark ? "#000" : "#fff" },
+                        styles.statusOptionText,
+                        newDevice.status === "online" && { color: "#fff" },
                       ]}
                     >
-                      Add Your First Device
+                      Online
+                    </ThemedText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.statusOption,
+                      {
+                        backgroundColor:
+                          newDevice.status === "offline"
+                            ? "#F44336"
+                            : "transparent",
+                        borderColor: "#F44336",
+                      },
+                    ]}
+                    onPress={() =>
+                      setNewDevice({ ...newDevice, status: "offline" })
+                    }
+                  >
+                    <ThemedText
+                      style={[
+                        styles.statusOptionText,
+                        newDevice.status === "offline" && { color: "#fff" },
+                      ]}
+                    >
+                      Offline
                     </ThemedText>
                   </TouchableOpacity>
                 </View>
-              ) : (
-                <FlatList
-                  data={devices}
-                  renderItem={renderDeviceItem}
-                  keyExtractor={(item) => item.id}
-                  style={styles.deviceList}
-                />
-              )}
-            </ThemedView>
-          </ThemedView>
-        </>
-      )}
-
-      {/* Add Device Modal */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: secondaryColor,
-                borderColor,
-              },
-            ]}
-          >
-            <ThemedText type="title" style={styles.modalTitle}>
-              Add New Device
-            </ThemedText>
-
-            <View style={styles.formGroup}>
-              <ThemedText style={styles.label}>Device Name</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { backgroundColor, color: textColor, borderColor },
-                ]}
-                placeholder="Enter device name"
-                placeholderTextColor={isDark ? "#888" : "#999"}
-                value={newDevice.name}
-                onChangeText={(text) =>
-                  setNewDevice({ ...newDevice, name: text })
-                }
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <ThemedText style={styles.label}>Device Type</ThemedText>
-              <View style={styles.typeSelector}>
-                {DEVICE_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type}
-                    style={[
-                      styles.typeOption,
-                      {
-                        backgroundColor:
-                          newDevice.type === type ? accentColor : "transparent",
-                        borderColor: accentColor,
-                      },
-                    ]}
-                    onPress={() => setNewDevice({ ...newDevice, type })}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.typeOptionText,
-                        newDevice.type === type && {
-                          color: isDark ? "#000" : "#fff",
-                        },
-                      ]}
-                    >
-                      {type}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
               </View>
-            </View>
 
-            <View style={styles.formGroup}>
-              <ThemedText style={styles.label}>Status</ThemedText>
-              <View style={styles.statusSelector}>
+              <View style={styles.modalActions}>
                 <TouchableOpacity
                   style={[
-                    styles.statusOption,
+                    styles.modalButton,
                     {
-                      backgroundColor:
-                        newDevice.status === "online"
-                          ? "#4CAF50"
-                          : "transparent",
-                      borderColor: "#4CAF50",
+                      backgroundColor: "transparent",
+                      borderWidth: 1,
+                      borderColor,
                     },
                   ]}
-                  onPress={() =>
-                    setNewDevice({ ...newDevice, status: "online" })
-                  }
+                  onPress={() => setModalVisible(false)}
                 >
-                  <ThemedText
-                    style={[
-                      styles.statusOptionText,
-                      newDevice.status === "online" && { color: "#fff" },
-                    ]}
-                  >
-                    Online
-                  </ThemedText>
+                  <ThemedText>Cancel</ThemedText>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[
-                    styles.statusOption,
+                    styles.modalButton,
                     {
-                      backgroundColor:
-                        newDevice.status === "offline"
-                          ? "#F44336"
-                          : "transparent",
-                      borderColor: "#F44336",
+                      backgroundColor: accentColor,
+                      opacity: !newDevice.name ? 0.5 : 1,
                     },
                   ]}
-                  onPress={() =>
-                    setNewDevice({ ...newDevice, status: "offline" })
-                  }
+                  disabled={!newDevice.name}
+                  onPress={handleAddDevice}
                 >
                   <ThemedText
                     style={[
-                      styles.statusOptionText,
-                      newDevice.status === "offline" && { color: "#fff" },
+                      styles.modalButtonText,
+                      { color: isDark ? "#000" : "#fff" },
                     ]}
                   >
-                    Offline
+                    Add Device
                   </ThemedText>
                 </TouchableOpacity>
               </View>
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  {
-                    backgroundColor: "transparent",
-                    borderWidth: 1,
-                    borderColor,
-                  },
-                ]}
-                onPress={() => setModalVisible(false)}
-              >
-                <ThemedText>Cancel</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.modalButton,
-                  {
-                    backgroundColor: accentColor,
-                    opacity: !newDevice.name ? 0.5 : 1,
-                  },
-                ]}
-                disabled={!newDevice.name}
-                onPress={handleAddDevice}
-              >
-                <ThemedText
-                  style={[
-                    styles.modalButtonText,
-                    { color: isDark ? "#000" : "#fff" },
-                  ]}
-                >
-                  Add Device
-                </ThemedText>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
-    </ThemedView>
+        </Modal>
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
