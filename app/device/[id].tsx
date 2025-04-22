@@ -209,6 +209,9 @@ const mockDeviceLogs: Record<string, LogData[]> = {
   ],
 };
 
+// Get screen dimensions for responsive design
+const { width, height } = Dimensions.get("window");
+
 export default function DeviceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -241,9 +244,6 @@ export default function DeviceDetailScreen() {
   const secondaryColor = isDark ? "#1a1a1a" : "#f0f0f0";
   const borderColor = isDark ? "#444" : "#ddd";
   const accentColor = isDark ? "#fff" : "#000";
-
-  // Get screen dimensions for responsive design
-  const { width, height } = Dimensions.get("window");
 
   // Subscribe to device changes
   useEffect(() => {
@@ -429,42 +429,35 @@ export default function DeviceDetailScreen() {
     try {
       setIsUpdating(true);
 
-      // Get current status from API
-      console.log("Fetching current status from API...");
-      const currentStatus = await getDeviceStatusFromAPI(device.id);
-      console.log("Current status from API:", currentStatus);
-
-      // Toggle the status
-      const newStatus = !currentStatus;
-      console.log("New status to set:", newStatus);
+      // Determine the new status based on the UI
+      const currentUiStatus = device.status === "online"; // true if "online", false if "offline"
+      const newApiStatus = !currentUiStatus; // Toggle: true -> false, false -> true
+      const newUiStatus = newApiStatus ? "online" : "offline"; // Map to UI string
 
       // Update status via API
-      console.log("Sending status update to API...");
-      const success = await setDeviceStatusViaAPI(newStatus, device.id);
+      console.log("Sending status update to API:", newApiStatus);
+      const success = await setDeviceStatusViaAPI(newApiStatus, device.id);
       console.log("API response success:", success);
 
       if (success) {
-        // Update device status in Firestore to keep UI in sync
-        console.log("Updating Firestore with new status...");
+        // Update device status in Firestore
+        console.log("Updating Firestore with new status:", newUiStatus);
         await updateDevice(device.id, {
-          status: newStatus ? "online" : "offline",
+          status: newUiStatus,
           lastSeen: new Date().toLocaleString(),
         });
 
-        // Add log entry about status change
-        console.log("Adding log entry...");
+        // Add log entry to Firestore
+        console.log("Adding log entry to Firestore...");
         await addLog({
           deviceId: device.id,
-          message: `Device status changed to ${
-            newStatus ? "online" : "offline"
-          } via API`,
+          message: `Device status changed to ${newUiStatus} via API`,
         });
 
         // Add log to API
+        console.log("Adding log entry to API...");
         await addLogToAPI(
-          `Device ${device.name} status changed to ${
-            newStatus ? "online" : "offline"
-          }`,
+          `Device ${device.name} status changed to ${newUiStatus}`,
           device.id
         );
 
@@ -473,7 +466,6 @@ export default function DeviceDetailScreen() {
         throw new Error("Failed to update device status via API");
       }
 
-      await checkStatus(device);
       setIsUpdating(false);
 
       // Refresh API logs
@@ -481,8 +473,7 @@ export default function DeviceDetailScreen() {
     } catch (error) {
       console.error("Error updating device status:", error);
       setIsUpdating(false);
-
-      // Show error to user (you might want to add a toast or alert here)
+      // Optionally, add a toast or alert to inform the user of the error
     }
   };
 
@@ -951,6 +942,14 @@ export default function DeviceDetailScreen() {
         </ThemedView>
       </ScrollView>
 
+      {/* Floating Add Button */}
+      <TouchableOpacity
+        style={[styles.floatingButton, { backgroundColor: accentColor }]}
+        onPress={() => setShowApiEditModal(true)}
+      >
+        <IconSymbol name="plus" color={isDark ? "#000" : "#fff"} size={24} />
+      </TouchableOpacity>
+
       {/* API Endpoint Edit Modal */}
       <Modal
         visible={showApiEditModal}
@@ -1064,7 +1063,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
-    paddingBottom: 32, // Add extra padding at the bottom for better scrolling
+    paddingBottom: 100, // Add extra padding at the bottom for the floating button
   },
   card: {
     padding: 16,
@@ -1110,14 +1109,14 @@ const styles = StyleSheet.create({
     textTransform: "capitalize",
   },
   metricsContainer: {
-    flexDirection: "row",
+    flexDirection: width > 500 ? "row" : "column",
     justifyContent: "space-between",
     marginTop: 16,
     flexWrap: "wrap",
   },
   metricItem: {
     alignItems: "center",
-    width: "30%",
+    width: width > 500 ? "30%" : "100%",
     minWidth: 80,
     marginBottom: 10,
   },
@@ -1245,5 +1244,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     minWidth: 80,
+  },
+  floatingButton: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 999,
   },
 });

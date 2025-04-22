@@ -268,25 +268,6 @@ export default function DevicesScreen() {
                   View Details
                 </ThemedText>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  {
-                    backgroundColor: "transparent",
-                    borderWidth: 1,
-                    borderColor: accentColor,
-                  },
-                ]}
-                onPress={() => {
-                  setSelectedDevice(item.id);
-                  setCarouselMode(false);
-                }}
-              >
-                <ThemedText style={styles.actionButtonText}>
-                  Send Command
-                </ThemedText>
-              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -363,6 +344,16 @@ export default function DevicesScreen() {
           >
             <IconSymbol
               name={carouselMode ? "list.bullet" : "house.fill"}
+              size={24}
+              color={colorScheme === "dark" ? "#fff" : "#000"}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setModalVisible(true)}
+          >
+            <IconSymbol
+              name="plus.circle"
               size={24}
               color={colorScheme === "dark" ? "#fff" : "#000"}
             />
@@ -771,12 +762,12 @@ const styles = StyleSheet.create({
   },
   carouselItemContainer: {
     width,
-    height: height * 0.7,
+    height: Math.min(height * 0.7, 600),
     paddingHorizontal: 20,
     justifyContent: "center",
   },
   carouselCard: {
-    height: height * 0.6,
+    height: Math.min(height * 0.6, 550),
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 2,
@@ -790,15 +781,16 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   imageContainer: {
-    height: "50%",
+    height: "40%",
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
+    backgroundColor: "#333",
   },
   deviceImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
+    width: "80%",
+    height: "80%",
+    resizeMode: "contain",
   },
   statusBadge: {
     position: "absolute",
@@ -831,13 +823,16 @@ const styles = StyleSheet.create({
   },
   carouselActions: {
     marginTop: 20,
+    flexDirection: width < 350 ? "column" : "row",
     gap: 12,
+    justifyContent: "space-between",
   },
   actionButton: {
     padding: 14,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
+    flex: width < 350 ? 0 : 1,
   },
   actionButtonText: {
     fontWeight: "bold",
