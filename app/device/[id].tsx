@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   View,
@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  SafeAreaView,
+  StatusBar,
+  Dimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThemedText } from "@/components/ThemedText";
@@ -16,6 +19,11 @@ import {
   addLog,
   updateDevice,
   subscribeToDeviceLogs,
+  getDeviceStatusFromAPI,
+  setDeviceStatusViaAPI,
+  getLogsFromAPI,
+  addLogToAPI,
+  clearLogsFromAPI,
 } from "@/services/deviceService";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/config/firebase";
@@ -203,9 +211,13 @@ export default function DeviceDetailScreen() {
   const colorScheme = useColorScheme();
   const [device, setDevice] = useState<DeviceData | null>(null);
   const [logs, setLogs] = useState<LogData[]>([]);
+  const [apiLogs, setApiLogs] = useState<string[]>([]);
   const [command, setCommand] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const lastStatusCheckRef = useRef<number>(0);
+  const statusCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const isDark = colorScheme === "dark";
   const backgroundColor = isDark ? "#000" : "#fff";
@@ -213,6 +225,9 @@ export default function DeviceDetailScreen() {
   const secondaryColor = isDark ? "#1a1a1a" : "#f0f0f0";
   const borderColor = isDark ? "#444" : "#ddd";
   const accentColor = isDark ? "#fff" : "#000";
+
+  // Get screen dimensions for responsive design
+  const { width, height } = Dimensions.get("window");
 
   // Subscribe to device changes
   useEffect(() => {
@@ -242,6 +257,32 @@ export default function DeviceDetailScreen() {
     return () => unsubscribe();
   }, [id]);
 
+  // Fetch logs from API
+  const fetchApiLogs = async () => {
+    try {
+      const apiLogs = await getLogsFromAPI();
+      setApiLogs(apiLogs);
+      console.log("API logs fetched:", apiLogs);
+    } catch (error) {
+      console.error("Error fetching API logs:", error);
+    }
+  };
+
+  // Clear logs from API
+  const handleClearLogs = async () => {
+    if (!device) return;
+
+    try {
+      setIsClearingLogs(true);
+      await clearLogsFromAPI();
+      await fetchApiLogs(); // Refresh logs after clearing
+      setIsClearingLogs(false);
+    } catch (error) {
+      console.error("Error clearing logs:", error);
+      setIsClearingLogs(false);
+    }
+  };
+
   // Subscribe to device logs
   useEffect(() => {
     if (!id) return;
@@ -257,8 +298,74 @@ export default function DeviceDetailScreen() {
       setLogs(convertedLogs);
     });
 
+    // Fetch API logs
+    fetchApiLogs();
+
     return () => unsubscribe();
   }, [id]);
+
+  const checkStatus = async (device: DeviceData) => {
+    try {
+      // Debounce: only check if at least 5 seconds have passed since last check
+      const now = Date.now();
+
+      lastStatusCheckRef.current = now;
+      console.log("Checking device status from API...");
+      const apiStatus = await getDeviceStatusFromAPI();
+      console.log("API status:", apiStatus);
+
+      const currentStatus = device.status === "online";
+      console.log("Current UI status:", currentStatus);
+
+      // Only update if there's a mismatch
+      if (apiStatus !== currentStatus) {
+        console.log("Status mismatch detected, updating Firestore...");
+        console.log(
+          `API status (${apiStatus}) !== UI status (${currentStatus})`
+        );
+
+        await updateDevice(device.id, {
+          status: apiStatus ? "online" : "offline",
+          lastSeen: new Date().toLocaleString(),
+        });
+
+        await addLog({
+          deviceId: device.id,
+          message: `Device status updated from API: ${
+            apiStatus ? "online" : "offline"
+          }`,
+        });
+        console.log("Firestore updated successfully");
+      } else {
+        console.log("Status in sync, no update needed");
+        console.log(
+          `API status (${apiStatus}) === UI status (${currentStatus})`
+        );
+      }
+    } catch (error) {
+      console.error("Error checking device status from API:", error);
+    }
+  };
+
+  // Periodically check device status from API
+  useEffect(() => {
+    if (!device) return;
+
+    // Check immediately
+    checkStatus(device);
+
+    // Then check every 30 seconds
+    statusCheckIntervalRef.current = setInterval(
+      () => checkStatus(device),
+      30000
+    );
+
+    return () => {
+      if (statusCheckIntervalRef.current) {
+        clearInterval(statusCheckIntervalRef.current);
+      }
+    };
+  }, []);
 
   const handleSendCommand = async () => {
     if (!command.trim() || !device) return;
@@ -272,6 +379,9 @@ export default function DeviceDetailScreen() {
         message: `Command sent: ${command}`,
       });
 
+      // Add log to API
+      await addLogToAPI(`Command sent to device ${device.name}: ${command}`);
+
       // Update device's lastSeen field
       await updateDevice(device.id, {
         lastSeen: new Date().toLocaleString(),
@@ -279,6 +389,9 @@ export default function DeviceDetailScreen() {
 
       setCommand("");
       setIsUpdating(false);
+
+      // Refresh API logs
+      await fetchApiLogs();
     } catch (error) {
       console.error("Error sending command:", error);
       setIsUpdating(false);
@@ -291,24 +404,59 @@ export default function DeviceDetailScreen() {
     try {
       setIsUpdating(true);
 
-      const newStatus = device.status === "online" ? "offline" : "online";
+      // Get current status from API
+      console.log("Fetching current status from API...");
+      const currentStatus = await getDeviceStatusFromAPI();
+      console.log("Current status from API:", currentStatus);
 
-      // Update device status
-      await updateDevice(device.id, {
-        status: newStatus,
-        lastSeen: new Date().toLocaleString(),
-      });
+      // Toggle the status
+      const newStatus = !currentStatus;
+      console.log("New status to set:", newStatus);
 
-      // Add log entry about status change
-      await addLog({
-        deviceId: device.id,
-        message: `Device status changed to ${newStatus}`,
-      });
+      // Update status via API
+      console.log("Sending status update to API...");
+      const success = await setDeviceStatusViaAPI(newStatus);
+      console.log("API response success:", success);
 
+      if (success) {
+        // Update device status in Firestore to keep UI in sync
+        console.log("Updating Firestore with new status...");
+        await updateDevice(device.id, {
+          status: newStatus ? "online" : "offline",
+          lastSeen: new Date().toLocaleString(),
+        });
+
+        // Add log entry about status change
+        console.log("Adding log entry...");
+        await addLog({
+          deviceId: device.id,
+          message: `Device status changed to ${
+            newStatus ? "online" : "offline"
+          } via API`,
+        });
+
+        // Add log to API
+        await addLogToAPI(
+          `Device ${device.name} status changed to ${
+            newStatus ? "online" : "offline"
+          }`
+        );
+
+        console.log("Status update completed successfully");
+      } else {
+        throw new Error("Failed to update device status via API");
+      }
+
+      await checkStatus(device);
       setIsUpdating(false);
+
+      // Refresh API logs
+      await fetchApiLogs();
     } catch (error) {
       console.error("Error updating device status:", error);
       setIsUpdating(false);
+
+      // Show error to user (you might want to add a toast or alert here)
     }
   };
 
@@ -318,20 +466,22 @@ export default function DeviceDetailScreen() {
 
   if (isLoading) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={isDark ? "#fff" : "#000"} />
           <ThemedText style={styles.loadingText}>
             Loading device details...
           </ThemedText>
         </View>
-      </ThemedView>
+      </SafeAreaView>
     );
   }
 
   if (!device) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.errorContainer}>
           <ThemedText type="title">Device Not Found</ThemedText>
           <TouchableOpacity
@@ -343,7 +493,7 @@ export default function DeviceDetailScreen() {
             </ThemedText>
           </TouchableOpacity>
         </View>
-      </ThemedView>
+      </SafeAreaView>
     );
   }
 
@@ -364,21 +514,45 @@ export default function DeviceDetailScreen() {
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <View
         style={[
           styles.header,
           { borderBottomColor: isDark ? "#1a1a1a" : "#ddd" },
         ]}
       >
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={handleBack}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <IconSymbol name="chevron.left" color={textColor} size={24} />
         </TouchableOpacity>
-        <ThemedText type="title">{device.name}</ThemedText>
-        <View style={{ width: 24 }} />
+        <ThemedText style={styles.headerTitle}>{device.name}</ThemedText>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleToggleStatus}
+            disabled={isUpdating}
+          >
+            {isUpdating ? (
+              <ActivityIndicator size="small" color={textColor} />
+            ) : (
+              <IconSymbol
+                name={device.status === "online" ? "wifi" : "wifi.slash"}
+                size={22}
+                color={textColor}
+              />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+      >
         <ThemedView
           style={[
             styles.card,
@@ -387,17 +561,6 @@ export default function DeviceDetailScreen() {
         >
           <View style={styles.infoHeader}>
             <ThemedText type="subtitle">Device Information</ThemedText>
-            <TouchableOpacity
-              onPress={handleToggleStatus}
-              disabled={isUpdating}
-              style={{ opacity: isUpdating ? 0.5 : 1 }}
-            >
-              {isUpdating ? (
-                <ActivityIndicator size="small" color={textColor} />
-              ) : (
-                <ThemedText>Toggle Status</ThemedText>
-              )}
-            </TouchableOpacity>
           </View>
           <View style={styles.infoRow}>
             <ThemedText style={styles.infoLabel}>Status:</ThemedText>
@@ -514,14 +677,57 @@ export default function DeviceDetailScreen() {
             </TouchableOpacity>
           </View>
         </ThemedView>
-
         <ThemedView
           style={[
             styles.card,
             { backgroundColor: secondaryColor, borderColor },
           ]}
         >
-          <ThemedText type="subtitle">Logs</ThemedText>
+          <View style={styles.infoHeader}>
+            <ThemedText type="subtitle">API Logs</ThemedText>
+          </View>
+          {apiLogs.length === 0 ? (
+            <View style={styles.emptyLogsContainer}>
+              <ThemedText style={styles.emptyText}>
+                No API logs available
+              </ThemedText>
+            </View>
+          ) : (
+            apiLogs.map((log, index) => (
+              <View key={index} style={[styles.logItem, { borderColor }]}>
+                <ThemedText>{log}</ThemedText>
+              </View>
+            ))
+          )}
+        </ThemedView>
+        <ThemedView
+          style={[
+            styles.card,
+            { backgroundColor: secondaryColor, borderColor },
+          ]}
+        >
+          <View style={styles.infoHeader}>
+            <ThemedText type="subtitle">Device Logs</ThemedText>
+            <TouchableOpacity
+              style={[styles.clearButton, { backgroundColor: accentColor }]}
+              onPress={handleClearLogs}
+              disabled={isClearingLogs}
+            >
+              {isClearingLogs ? (
+                <ActivityIndicator
+                  size="small"
+                  color={isDark ? "#000" : "#fff"}
+                />
+              ) : (
+                <ThemedText
+                  style={{ color: isDark ? "#000" : "#fff", fontSize: 12 }}
+                >
+                  Clear Logs
+                </ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
+
           {logs.length === 0 ? (
             <View style={styles.emptyLogsContainer}>
               <ThemedText style={styles.emptyText}>
@@ -540,7 +746,7 @@ export default function DeviceDetailScreen() {
           )}
         </ThemedView>
       </ScrollView>
-    </ThemedView>
+    </SafeAreaView>
   );
 }
 
@@ -552,21 +758,51 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
+    width: "100%",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    textAlign: "center",
+    flex: 1,
   },
   backButton: {
+    padding: 4,
+    zIndex: 1,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconButton: {
     padding: 8,
+    borderRadius: 20,
+    marginLeft: 8,
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     padding: 16,
+    paddingBottom: 32, // Add extra padding at the bottom for better scrolling
   },
   card: {
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 16,
     borderWidth: 1,
+    width: "100%",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   infoHeader: {
     flexDirection: "row",
@@ -600,9 +836,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 16,
+    flexWrap: "wrap",
   },
   metricItem: {
     alignItems: "center",
+    width: "30%",
+    minWidth: 80,
+    marginBottom: 10,
   },
   metricValue: {
     fontSize: 24,
@@ -615,6 +855,7 @@ const styles = StyleSheet.create({
   commandInputContainer: {
     flexDirection: "row",
     marginTop: 8,
+    width: "100%",
   },
   commandInput: {
     flex: 1,
@@ -670,5 +911,11 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     opacity: 0.7,
+  },
+  clearButton: {
+    padding: 8,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

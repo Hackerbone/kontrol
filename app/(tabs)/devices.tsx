@@ -10,6 +10,7 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -26,6 +27,7 @@ import {
   subscribeToDeviceLogs,
 } from "@/services/deviceService";
 import { SafeAreaView } from "react-native-safe-area-context"; // or from "react-native" if you're not using safe-area-context
+import LogoutButton from "@/components/LogoutButton";
 
 // Default device images
 const deviceImages = {
@@ -37,6 +39,18 @@ const deviceImages = {
 
 const DEVICE_TYPES = ["Sensor", "Controller", "Camera", "Gateway"];
 const { width, height } = Dimensions.get("window");
+
+// Responsive values
+const isSmallScreen = width < 375;
+const isMediumScreen = width >= 375 && width < 414;
+const cardPadding = isSmallScreen ? 12 : 16;
+const cardMargin = isSmallScreen ? 8 : 12;
+const fontSize = {
+  small: isSmallScreen ? 12 : 14,
+  medium: isSmallScreen ? 14 : 16,
+  large: isSmallScreen ? 18 : 20,
+  xlarge: isSmallScreen ? 22 : 24,
+};
 
 export default function DevicesScreen() {
   const router = useRouter();
@@ -310,31 +324,44 @@ export default function DevicesScreen() {
 
   if (loading && devices.length === 0) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={textColor} />
           <ThemedText style={{ marginTop: 20 }}>Loading devices...</ThemedText>
         </View>
-      </ThemedView>
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor }}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <View
+        style={[
+          styles.header,
+          { borderBottomColor: isDark ? "#1a1a1a" : "#ddd" },
+        ]}
+      >
+        <ThemedText style={styles.title}>Devices</ThemedText>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setCarouselMode(!carouselMode)}
+          >
+            <IconSymbol
+              name={carouselMode ? "list.bullet" : "house.fill"}
+              size={24}
+              color={colorScheme === "dark" ? "#fff" : "#000"}
+            />
+          </TouchableOpacity>
+          <LogoutButton />
+        </View>
+      </View>
       <ThemedView style={[styles.container, { backgroundColor }]}>
         {carouselMode ? (
           // Carousel View
           <View style={styles.carouselContainer}>
-            <View style={styles.carouselHeader}>
-              <TouchableOpacity onPress={() => setCarouselMode(false)}>
-                <IconSymbol name="list.bullet" color={textColor} size={24} />
-              </TouchableOpacity>
-              <ThemedText type="title">All Devices</ThemedText>
-              <TouchableOpacity onPress={() => setModalVisible(true)}>
-                <IconSymbol name="plus.circle" color={textColor} size={24} />
-              </TouchableOpacity>
-            </View>
-
             {devices.length === 0 ? (
               <View style={styles.emptyStateContainer}>
                 <ThemedText style={styles.emptyStateText}>
@@ -387,14 +414,14 @@ export default function DevicesScreen() {
         ) : (
           // List View
           <>
-            <ThemedView style={styles.header}>
+            <View style={styles.listHeader}>
               <ThemedText type="title">Device Manager</ThemedText>
               <View style={styles.headerActions}>
                 <TouchableOpacity
                   style={styles.iconButton}
                   onPress={() => setCarouselMode(true)}
                 >
-                  <IconSymbol name="list.bullet" color={textColor} size={24} />
+                  <IconSymbol name="house.fill" color={textColor} size={24} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.iconButton}
@@ -403,10 +430,10 @@ export default function DevicesScreen() {
                   <IconSymbol name="plus.circle" color={textColor} size={24} />
                 </TouchableOpacity>
               </View>
-            </ThemedView>
+            </View>
 
-            <ThemedView style={styles.content}>
-              <ThemedView style={styles.devicesSection}>
+            <View style={styles.content}>
+              <View style={styles.devicesSection}>
                 <ThemedText type="subtitle">Devices</ThemedText>
                 {devices.length === 0 ? (
                   <View style={styles.emptyStateContainer}>
@@ -436,10 +463,11 @@ export default function DevicesScreen() {
                     renderItem={renderDeviceItem}
                     keyExtractor={(item) => item.id}
                     style={styles.deviceList}
+                    contentContainerStyle={styles.deviceListContent}
                   />
                 )}
-              </ThemedView>
-            </ThemedView>
+              </View>
+            </View>
           </>
         )}
 
@@ -617,34 +645,53 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    padding: 16,
+    paddingHorizontal: cardPadding,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    width: "100%",
   },
-  headerActions: {
+  listHeader: {
+    paddingHorizontal: cardPadding,
+    paddingVertical: 12,
     flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
   },
-  iconButton: {
-    marginLeft: 16,
+  title: {
+    fontSize: fontSize.large,
+    fontWeight: "600",
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: cardPadding,
   },
   devicesSection: {
     marginBottom: 16,
+    flex: 1,
   },
   deviceList: {
     marginTop: 16,
   },
+  deviceListContent: {
+    paddingBottom: 20,
+  },
   deviceItem: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    padding: cardPadding,
+    borderRadius: 12,
+    marginBottom: cardMargin,
     borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   deviceHeader: {
     flexDirection: "row",
@@ -653,11 +700,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   deviceType: {
-    fontSize: 12,
+    fontSize: fontSize.small,
     opacity: 0.7,
   },
   lastSeen: {
-    fontSize: 11,
+    fontSize: fontSize.small - 1,
     marginTop: 4,
     opacity: 0.5,
   },
@@ -676,26 +723,18 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   logItem: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    padding: cardPadding,
+    borderRadius: 12,
+    marginBottom: cardMargin,
     borderWidth: 1,
   },
   logTimestamp: {
-    fontSize: 12,
+    fontSize: fontSize.small,
     opacity: 0.7,
     marginBottom: 4,
   },
   carouselContainer: {
     flex: 1,
-  },
-  carouselHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
   },
   carouselList: {
     alignItems: "center",
@@ -711,6 +750,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 2,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 8,
   },
   imageContainer: {
     height: "50%",
@@ -741,13 +788,14 @@ const styles = StyleSheet.create({
   },
   deviceName: {
     marginBottom: 4,
+    fontSize: fontSize.large,
   },
   deviceTypeLabel: {
-    fontSize: 16,
+    fontSize: fontSize.medium,
     marginBottom: 16,
   },
   lastSeenText: {
-    fontSize: 12,
+    fontSize: fontSize.small,
     opacity: 0.7,
     marginBottom: 16,
   },
@@ -863,7 +911,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   emptyStateText: {
-    fontSize: 16,
+    fontSize: fontSize.medium,
     marginBottom: 20,
     opacity: 0.7,
   },
@@ -877,5 +925,14 @@ const styles = StyleSheet.create({
   },
   addDeviceButtonText: {
     fontWeight: "bold",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconButton: {
+    marginLeft: 16,
+    padding: 8,
+    borderRadius: 20,
   },
 });
