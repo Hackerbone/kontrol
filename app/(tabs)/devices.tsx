@@ -67,6 +67,7 @@ export default function DevicesScreen() {
     name: "",
     type: "Sensor",
     status: "offline",
+    apiEndpoint: "",
   });
   const [loading, setLoading] = useState(true);
 
@@ -134,9 +135,20 @@ export default function DevicesScreen() {
         name: newDevice.name,
         status: newDevice.status as "online" | "offline",
         type: newDevice.type || "Sensor",
+        apiEndpoint: newDevice.apiEndpoint,
+        metrics: {
+          cpu: 0,
+          memory: 0,
+          temperature: 0,
+        },
       });
 
-      setNewDevice({ name: "", type: "Sensor", status: "offline" });
+      setNewDevice({
+        name: "",
+        type: "Sensor",
+        status: "offline",
+        apiEndpoint: "",
+      });
       setModalVisible(false);
     } catch (error) {
       console.error("Error adding device:", error);
@@ -504,6 +516,24 @@ export default function DevicesScreen() {
                   value={newDevice.name}
                   onChangeText={(text) =>
                     setNewDevice({ ...newDevice, name: text })
+                  }
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <ThemedText style={styles.label}>
+                  API Endpoint for Metrics
+                </ThemedText>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { backgroundColor, color: textColor, borderColor },
+                  ]}
+                  placeholder="https://your-api-endpoint.com/metrics"
+                  placeholderTextColor={isDark ? "#888" : "#999"}
+                  value={newDevice.apiEndpoint}
+                  onChangeText={(text) =>
+                    setNewDevice({ ...newDevice, apiEndpoint: text })
                   }
                 />
               </View>

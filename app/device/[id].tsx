@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
+  Modal,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThemedText } from "@/components/ThemedText";
@@ -44,7 +45,10 @@ interface DeviceData {
     cpu: number;
     memory: number;
     temperature: number;
+    pressure?: number;
+    humidity?: number;
   };
+  apiEndpoint?: string;
 }
 
 // Local log type
@@ -216,8 +220,20 @@ export default function DeviceDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
+  const [showApiEditModal, setShowApiEditModal] = useState(false);
+  const [newApiEndpoint, setNewApiEndpoint] = useState("");
   const lastStatusCheckRef = useRef<number>(0);
   const statusCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [sensorData, setSensorData] = useState<{
+    temperature: number | null;
+    humidity: number | null;
+    pressure: number | null;
+  }>({
+    temperature: null,
+    humidity: null,
+    pressure: null,
+  });
 
   const isDark = colorScheme === "dark";
   const backgroundColor = isDark ? "#000" : "#fff";
@@ -257,12 +273,18 @@ export default function DeviceDetailScreen() {
     return () => unsubscribe();
   }, [id]);
 
+  console.log("device", device);
+  console.log("apiEndpoint", device?.apiEndpoint);
+
   // Fetch logs from API
   const fetchApiLogs = async () => {
     try {
-      const apiLogs = await getLogsFromAPI();
+      const apiLogs = await getLogsFromAPI(device?.id);
       setApiLogs(apiLogs);
       console.log("API logs fetched:", apiLogs);
+
+      // Parse sensor data from logs
+      parseSensorDataFromLogs(apiLogs);
     } catch (error) {
       console.error("Error fetching API logs:", error);
     }
@@ -274,7 +296,7 @@ export default function DeviceDetailScreen() {
 
     try {
       setIsClearingLogs(true);
-      await clearLogsFromAPI();
+      await clearLogsFromAPI(device.id);
       await fetchApiLogs(); // Refresh logs after clearing
       setIsClearingLogs(false);
     } catch (error) {
@@ -311,7 +333,7 @@ export default function DeviceDetailScreen() {
 
       lastStatusCheckRef.current = now;
       console.log("Checking device status from API...");
-      const apiStatus = await getDeviceStatusFromAPI();
+      const apiStatus = await getDeviceStatusFromAPI(device.id);
       console.log("API status:", apiStatus);
 
       const currentStatus = device.status === "online";
@@ -380,7 +402,10 @@ export default function DeviceDetailScreen() {
       });
 
       // Add log to API
-      await addLogToAPI(`Command sent to device ${device.name}: ${command}`);
+      await addLogToAPI(
+        `Command sent to device ${device.name}: ${command}`,
+        device.id
+      );
 
       // Update device's lastSeen field
       await updateDevice(device.id, {
@@ -406,7 +431,7 @@ export default function DeviceDetailScreen() {
 
       // Get current status from API
       console.log("Fetching current status from API...");
-      const currentStatus = await getDeviceStatusFromAPI();
+      const currentStatus = await getDeviceStatusFromAPI(device.id);
       console.log("Current status from API:", currentStatus);
 
       // Toggle the status
@@ -415,7 +440,7 @@ export default function DeviceDetailScreen() {
 
       // Update status via API
       console.log("Sending status update to API...");
-      const success = await setDeviceStatusViaAPI(newStatus);
+      const success = await setDeviceStatusViaAPI(newStatus, device.id);
       console.log("API response success:", success);
 
       if (success) {
@@ -439,7 +464,8 @@ export default function DeviceDetailScreen() {
         await addLogToAPI(
           `Device ${device.name} status changed to ${
             newStatus ? "online" : "offline"
-          }`
+          }`,
+          device.id
         );
 
         console.log("Status update completed successfully");
@@ -463,6 +489,107 @@ export default function DeviceDetailScreen() {
   const handleBack = () => {
     router.back();
   };
+
+  // Update API endpoint
+  const handleUpdateApiEndpoint = async () => {
+    if (!device) return;
+
+    try {
+      setIsUpdating(true);
+
+      // Update device in Firestore
+      await updateDevice(device.id, {
+        apiEndpoint: newApiEndpoint,
+        lastSeen: new Date().toLocaleString(),
+      });
+
+      // Add log entry
+      await addLog({
+        deviceId: device.id,
+        message: `API endpoint updated: ${newApiEndpoint}`,
+      });
+
+      // Close modal
+      setShowApiEditModal(false);
+      setIsUpdating(false);
+    } catch (error) {
+      console.error("Error updating API endpoint:", error);
+      setIsUpdating(false);
+    }
+  };
+
+  // When device loads, initialize the new API endpoint field
+  useEffect(() => {
+    if (device && device.apiEndpoint) {
+      setNewApiEndpoint(device.apiEndpoint);
+    }
+  }, [device]);
+
+  // Extract sensor data from API logs
+  const parseSensorDataFromLogs = (logs: string[]) => {
+    if (!logs || logs.length === 0) return;
+
+    // Find the most recent log entry with sensor data (contains "Temperature" and "Humidity")
+    const sensorLogRegex =
+      /Pressure\s+([\d.]+)\s+hPaTemperature\s+([\d.]+)\s+CHumidity\s+([\d.]+)/;
+
+    for (const log of logs) {
+      const match = log.match(sensorLogRegex);
+      if (match) {
+        const pressure = parseFloat(match[1]);
+        const temperature = parseFloat(match[2]);
+        const humidity = parseFloat(match[3]);
+
+        console.log(
+          `Parsed sensor data: Temperature: ${temperature}°C, Humidity: ${humidity}%, Pressure: ${pressure} hPa`
+        );
+
+        setSensorData({
+          temperature,
+          humidity,
+          pressure,
+        });
+
+        // Update device metrics in state if needed
+        if (device && device.metrics) {
+          const updatedMetrics = {
+            cpu: device.metrics.cpu || 0,
+            memory: device.metrics.memory || 0,
+            temperature,
+            humidity,
+            pressure,
+          };
+
+          setDevice({
+            ...device,
+            metrics: updatedMetrics,
+          });
+        }
+
+        return;
+      }
+    }
+  };
+
+  // Process logs when received
+  useEffect(() => {
+    if (apiLogs && apiLogs.length > 0) {
+      parseSensorDataFromLogs(apiLogs);
+    }
+  }, [apiLogs]);
+
+  // Update periodic metrics refresh
+  useEffect(() => {
+    if (!device || !device.apiEndpoint) return;
+
+    // Fetch logs immediately to get latest metrics
+    fetchApiLogs();
+
+    // Then fetch logs every 30 seconds to keep metrics updated
+    const intervalId = setInterval(fetchApiLogs, 30000);
+
+    return () => clearInterval(intervalId);
+  }, [device]);
 
   if (isLoading) {
     return (
@@ -499,9 +626,9 @@ export default function DeviceDetailScreen() {
 
   // Calculate metrics for display
   const metrics = {
-    cpu: device.metrics?.cpu || 0,
-    memory: device.metrics?.memory || 0,
-    temperature: device.metrics?.temperature || 0,
+    temperature: sensorData.temperature ?? device?.metrics?.temperature ?? 0,
+    humidity: sensorData.humidity ?? 0,
+    pressure: sensorData.pressure ?? 0,
   };
 
   const formatTimestamp = (timestamp: any) => {
@@ -597,6 +724,47 @@ export default function DeviceDetailScreen() {
             <ThemedText style={styles.infoLabel}>Created:</ThemedText>
             <ThemedText>{formatTimestamp(device.createdAt)}</ThemedText>
           </View>
+          {device.apiEndpoint && (
+            <View style={styles.infoRow}>
+              <ThemedText style={styles.infoLabel}>API Endpoint:</ThemedText>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  maxWidth: "60%",
+                }}
+              >
+                <ThemedText
+                  numberOfLines={1}
+                  ellipsizeMode="middle"
+                  style={{ flex: 1 }}
+                >
+                  {device.apiEndpoint}
+                </ThemedText>
+                <TouchableOpacity
+                  style={{ marginLeft: 8 }}
+                  onPress={() => setShowApiEditModal(true)}
+                >
+                  <IconSymbol name="pencil" size={16} color={textColor} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          {!device.apiEndpoint && (
+            <View style={styles.infoRow}>
+              <ThemedText style={styles.infoLabel}>API Endpoint:</ThemedText>
+              <TouchableOpacity
+                style={[styles.addApiButton, { backgroundColor: accentColor }]}
+                onPress={() => setShowApiEditModal(true)}
+              >
+                <ThemedText
+                  style={{ color: isDark ? "#000" : "#fff", fontSize: 12 }}
+                >
+                  Add
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+          )}
         </ThemedView>
 
         <ThemedView
@@ -605,25 +773,61 @@ export default function DeviceDetailScreen() {
             { backgroundColor: secondaryColor, borderColor },
           ]}
         >
-          <ThemedText type="subtitle">Metrics</ThemedText>
+          <View style={styles.infoHeader}>
+            <ThemedText type="subtitle">Sensor Data</ThemedText>
+            {device?.apiEndpoint && (
+              <TouchableOpacity
+                style={[styles.refreshButton, { backgroundColor: accentColor }]}
+                onPress={fetchApiLogs}
+              >
+                <ThemedText
+                  style={{ color: isDark ? "#000" : "#fff", fontSize: 12 }}
+                >
+                  Refresh
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.metricsContainer}>
             <View style={styles.metricItem}>
-              <ThemedText style={styles.metricValue}>{metrics.cpu}%</ThemedText>
-              <ThemedText style={styles.metricLabel}>CPU</ThemedText>
-            </View>
-            <View style={styles.metricItem}>
               <ThemedText style={styles.metricValue}>
-                {metrics.memory}%
-              </ThemedText>
-              <ThemedText style={styles.metricLabel}>Memory</ThemedText>
-            </View>
-            <View style={styles.metricItem}>
-              <ThemedText style={styles.metricValue}>
-                {metrics.temperature}°C
+                {metrics.temperature !== null
+                  ? metrics.temperature.toFixed(1)
+                  : "N/A"}
+                °C
               </ThemedText>
               <ThemedText style={styles.metricLabel}>Temperature</ThemedText>
             </View>
+            {sensorData.humidity !== null && (
+              <View style={styles.metricItem}>
+                <ThemedText style={styles.metricValue}>
+                  {metrics.humidity !== null
+                    ? metrics.humidity.toFixed(1)
+                    : "N/A"}
+                  %
+                </ThemedText>
+                <ThemedText style={styles.metricLabel}>Humidity</ThemedText>
+              </View>
+            )}
+            {sensorData.pressure !== null && (
+              <View style={styles.metricItem}>
+                <ThemedText style={styles.metricValue}>
+                  {metrics.pressure !== null
+                    ? metrics.pressure.toFixed(1)
+                    : "N/A"}{" "}
+                  hPa
+                </ThemedText>
+                <ThemedText style={styles.metricLabel}>Pressure</ThemedText>
+              </View>
+            )}
           </View>
+          {!device.apiEndpoint && (
+            <ThemedText
+              style={{ textAlign: "center", marginTop: 10, opacity: 0.7 }}
+            >
+              No metrics API endpoint configured
+            </ThemedText>
+          )}
         </ThemedView>
 
         <ThemedView
@@ -746,6 +950,79 @@ export default function DeviceDetailScreen() {
           )}
         </ThemedView>
       </ScrollView>
+
+      {/* API Endpoint Edit Modal */}
+      <Modal
+        visible={showApiEditModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowApiEditModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: secondaryColor, borderColor },
+            ]}
+          >
+            <ThemedText type="subtitle" style={{ marginBottom: 16 }}>
+              {device.apiEndpoint ? "Edit API Endpoint" : "Add API Endpoint"}
+            </ThemedText>
+
+            <TextInput
+              style={[
+                styles.apiInput,
+                { backgroundColor, color: textColor, borderColor },
+              ]}
+              placeholder="https://your-api-endpoint.com/metrics"
+              placeholderTextColor={isDark ? "#888" : "#999"}
+              value={newApiEndpoint}
+              onChangeText={setNewApiEndpoint}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: "transparent",
+                    borderWidth: 1,
+                    borderColor,
+                  },
+                ]}
+                onPress={() => setShowApiEditModal(false)}
+              >
+                <ThemedText>Cancel</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: accentColor,
+                    opacity: isUpdating ? 0.5 : 1,
+                  },
+                ]}
+                onPress={handleUpdateApiEndpoint}
+                disabled={isUpdating}
+              >
+                {isUpdating ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={isDark ? "#000" : "#fff"}
+                  />
+                ) : (
+                  <ThemedText style={{ color: isDark ? "#000" : "#fff" }}>
+                    Save
+                  </ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -845,7 +1122,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   metricValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
   },
   metricLabel: {
@@ -917,5 +1194,56 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addApiButton: {
+    padding: 6,
+    borderRadius: 6,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    width: "85%",
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  apiInput: {
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    minWidth: 80,
   },
 });
